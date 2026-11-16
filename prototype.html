@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oddshire — Autonomous TikTok Live RPG &amp; Gacha Prototype</title>
+<style>
+  :root {
+    --bg: #0c1017;
+    --panel: #151b26;
+    --panel-2: #1d2534;
+    --border: #2c384d;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --gold: #fbbf24;
+    --mint: #34d399;
+    --sky: #60a5fa;
+    --rose: #fb7185;
+    --violet: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    gap: 14px;
+    padding: 12px;
+  }
+
+  /* LEFT: 9:16 PHONE / OBS VIEWPORT */
+  .stage-wrap {
+    flex: 0 0 auto;
+    height: calc(100vh - 24px);
+    aspect-ratio: 9 / 16;
+    background: #14222e;
+    border-radius: 22px;
+    border: 3px solid #334155;
+    box-shadow: 0 22px 60px rgba(0,0,0,0.7);
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+  #worldCanvas { width: 100%; height: 100%; display: block; }
+
+  /* NATIVE TIKTOK TOP HEADER SIMULATOR (0 to 52px on scaled preview ≈ 72px on 1080p) */
+  .tt-top-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 50px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.75), rgba(0,0,0,0.18));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    pointer-events: none;
+    z-index: 15;
+    transition: opacity 0.25s ease;
+  }
+  .tt-top-header.hidden { opacity: 0; }
+  .tt-host-pill {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0,0,0,0.5);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+  }
+  .tt-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #fb7185; }
+  .tt-top-stats { font-size: 11px; color: #e2e8f0; background: rgba(0,0,0,0.45); padding: 4px 9px; border-radius: 999px; }
+
+  /* SAFE ZONE GUIDE (7.5% to 65%) */
+  .safe-line {
+    position: absolute; left: 0; right: 0; top: 65%;
+    border-top: 1.5px dashed rgba(251, 191, 36, 0.5);
+    pointer-events: none; z-index: 14;
+  }
+  .safe-line span {
+    position: absolute; right: 8px; top: -17px;
+    font-size: 9px; font-weight: 800; color: #fde68a;
+    background: rgba(0,0,0,0.65); padding: 1px 6px; border-radius: 6px;
+  }
+
+  /* SAFE STREAM HUD (Starts BELOW TikTok Top Header, Ends at 65%) */
+  .hud-safe-zone {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    right: 0;
+    height: calc(65% - 52px);
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px 10px 6px 10px;
+    z-index: 10;
+  }
+
+  /* FULL-WIDTH LEGIBLE TOP STACK */
+  .hud-top-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .auction-bar {
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(251, 191, 36, 0.55);
+    border-radius: 10px;
+    padding: 5px 9px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 800;
+    gap: 6px;
+  }
+  .auction-bar.contested {
+    border-color: #fb7185;
+    background: rgba(127, 29, 29, 0.9);
+    animation: pulseBorder 0.7s infinite alternate;
+  }
+  @keyframes pulseBorder {
+    from { box-shadow: 0 0 0 rgba(251,113,133,0.4); }
+    to { box-shadow: 0 0 14px rgba(251,113,133,0.9); }
+  }
+  .dm-pill { color: #fde68a; }
+  .usurp-pill { color: #93c5fd; font-size: 10.5px; }
+
+  .plot-card {
+    background: rgba(15, 23, 42, 0.84);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(255,255,255,0.16);
+    border-radius: 11px;
+    padding: 7px 9px;
+  }
+  .plot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .plot-title { font-size: 13px; font-weight: 800; color: #fff7ed; }
+  .timers-tag { font-size: 10px; font-weight: 700; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 7px; white-space: nowrap; }
+  .plot-narration { font-size: 11px; color: #e2e8f0; line-height: 1.25; margin-bottom: 5px; }
+  .choices-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .choice-chip {
+    position: relative;
+    background: rgba(255,255,255,0.08);
+    border-radius: 7px;
+    padding: 4px 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    overflow: hidden;
+    display: flex; justify-content: space-between; align-items: center; gap: 3px;
+  }
+  .choice-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: rgba(52, 211, 153, 0.28); z-index: 0;
+    transition: width 0.25s ease;
+  }
+  .choice-chip.wild .choice-fill { background: rgba(167, 139, 250, 0.32); }
+  .choice-chip span { position: relative; z-index: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .king-boss-row {
+    display: flex; justify-content: space-between; gap: 6px;
+    font-size: 11px; font-weight: 800;
+  }
+  .kb-pill {
+    background: rgba(15, 23, 42, 0.84);
+    border: 1px solid rgba(255,255,255,0.16);
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #fde68a;
+  }
+  .kb-pill.boss { color: #fecdd3; border-color: rgba(251, 113, 133, 0.55); background: rgba(127,29,29,0.82); }
+
+  /* LOWER SAFE ZONE: BATCH SUMMARY, ONBOARDING CTA & CAMERA */
+  .hud-bottom-safe {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .highlight-banner {
+    background: linear-gradient(90deg, rgba(245,158,11,0.94), rgba(217,70,239,0.92));
+    color: #fff; font-size: 11.5px; font-weight: 800;
+    text-align: center; padding: 5px 10px; border-radius: 9px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+    opacity: 0; transform: translateY(4px); transition: all 0.2s ease;
+  }
+  .highlight-banner.visible { opacity: 1; transform: translateY(0); }
+
+  .batch-feed-card {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    border-radius: 9px;
+    padding: 5px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .batch-summary-line { font-size: 11px; font-weight: 800; color: #fde68a; }
+  .batch-sub-lines { font-size: 10.5px; color: #e2e8f0; line-height: 1.28; }
+
+  .onboarding-cta {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    background: rgba(16, 185, 129, 0.9);
+    color: #022c22;
+    font-size: 11px; font-weight: 900;
+    padding: 4px 9px;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .cam-tag {
+    background: rgba(15,23,42,0.85); color: #bae6fd;
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  /* BOTTOM 35% MOCK TIKTOK CHAT OVERLAY */
+  .tiktok-overlay {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 35%;
+    background: linear-gradient(to top, rgba(0,0,0,0.9) 45%, rgba(0,0,0,0.35) 85%, transparent);
+    pointer-events: none; padding: 14px 12px 10px 12px;
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 4px;
+    transition: opacity 0.25s ease; z-index: 12;
+  }
+  .tiktok-overlay.hidden { opacity: 0; }
+  .tt-tag { align-self: flex-start; font-size: 9px; color: #94a3b8; background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 999px; margin-bottom: auto; }
+  .tt-chat-line { font-size: 11.5px; color: rgba(255,255,255,0.94); text-shadow: 0 1px 3px rgba(0,0,0,0.95); }
+  .tt-chat-line span { font-weight: 800; color: #7dd3fc; margin-right: 5px; }
+  .tt-input-bar {
+    margin-top: 4px; display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,0.14); border-radius: 999px;
+    padding: 6px 12px; font-size: 11px; color: rgba(255,255,255,0.7);
+  }
+
+  /* RIGHT: SIMULATOR & PLAYTEST CONTROLS */
+  .sim-panel {
+    flex: 1; min-width: 340px; height: calc(100vh - 24px);
+    overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;
+  }
+  .sim-header {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 11px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+  }
+  .sim-header h1 { font-size: 15.5px; font-weight: 800; }
+  .sim-header p { font-size: 11.5px; color: var(--muted); }
+  .telemetry-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+  .stat-box .lbl { font-size: 10px; color: var(--muted); }
+  .stat-box .val { font-size: 15px; font-weight: 800; margin-top: 2px; color: var(--gold); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 11px 13px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card h2 {
+    font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+    color: #cbd5e1; display: flex; justify-content: space-between; align-items: center;
+  }
+  .row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  input {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 12.5px; outline: none;
+  }
+  input:focus { border-color: var(--sky); }
+  .grow { flex: 1; min-width: 140px; }
+  button {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  }
+  button:hover { background: #293346; border-color: #4b5e80; }
+  button.primary { background: #2563eb; border-color: #3b82f6; }
+  button.gold { background: linear-gradient(135deg, #d97706, #b45309); border-color: #fbbf24; color: #fffbeb; }
+  button.purple { background: linear-gradient(135deg, #7c3aed, #6d28d9); border-color: #a78bfa; }
+  button.mint { background: #059669; border-color: #34d399; }
+  button.rose { background: #be123c; border-color: #fb7185; }
+  button.active-cls { border-color: var(--gold); background: rgba(251,191,36,0.18); color: #fde68a; }
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.35; }
+  .my-sheet {
+    display: flex; gap: 10px; flex-wrap: wrap; background: var(--panel-2);
+    padding: 7px 10px; border-radius: 10px; font-size: 11.5px;
+  }
+  .my-sheet span b { color: var(--gold); }
+</style>
+</head>
+<body>
+
+  <!-- LEFT: 9:16 VERTICAL STREAM FRAME -->
+  <div class="stage-wrap">
+    <canvas id="worldCanvas" width="540" height="960"></canvas>
+
+    <!-- NATIVE TIKTOK TOP HEADER OVERLAY MOCK -->
+    <div class="tt-top-header" id="ttTopHeader">
+      <div class="tt-host-pill"><span class="tt-live-dot"></span> @OddshireLive · Oddshire</div>
+      <div class="tt-top-stats">👁️ 142 · 💎 1.2k</div>
+    </div>
+
+    <div class="safe-line"><span>SAFE ZONE FLOOR (Y: 65%)</span></div>
+
+    <div class="hud-safe-zone">
+      <!-- TOP LEGIBLE FULL-WIDTH HUD STACK -->
+      <div class="hud-top-stack">
+        <div class="auction-bar" id="auctionBar">
+          <span class="dm-pill" id="dmPill">🤖 AI Storyteller · Monster Crusade</span>
+          <span class="usurp-pill" id="usurpPill">👑 Sky Master: 200💎 · Hall of Fame</span>
+        </div>
+
+        <div class="plot-card">
+          <div class="plot-header">
+            <div class="plot-title" id="plotTitle">Chapter I: The Goblin Toll Bridge</div>
+            <div class="timers-tag" id="timersTag">Vote 24s · RP 8s</div>
+          </div>
+          <div class="plot-narration" id="plotNarration">A mossy troll blocks the Frontier Gate! Choose a path or roll free-text RP!</div>
+          <div class="choices-grid" id="choicesGrid"></div>
+        </div>
+
+        <div class="king-boss-row">
+          <div class="kb-pill" id="kingPill">👑 King: @KnightCommander (Lv.5)</div>
+          <div class="kb-pill boss" id="bossPill">👹 Troll: 1500/1500 HP</div>
+        </div>
+      </div>
+
+      <!-- BOTTOM SAFE ZONE: HIGHLIGHTS, AGGREGATED BATCH LOG & 5-SEC ONBOARDING -->
+      <div class="hud-bottom-safe">
+        <div class="highlight-banner" id="highlightBanner">🏆 CRITICAL PLAY!</div>
+
+        <div class="batch-feed-card">
+          <div class="batch-summary-line" id="batchSummaryLine">⚔️ Party advancing across the Whispering Frontier!</div>
+          <div class="batch-sub-lines" id="batchSubLines">🎲 Tip: Your class (+3) &amp; Blacksmith gear boost your D20 rolls!</div>
+        </div>
+
+        <div class="onboarding-cta">
+          <span>💬 Type 1, 2, 3 or !act &lt;action&gt; · !me spots you</span>
+          <span class="cam-tag" id="camPill">🎥 Wide Patrol</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM 35% MOCK TIKTOK CHAT OVERLAY -->
+    <div class="tiktok-overlay" id="tiktokOverlay">
+      <div class="tt-tag">📱 Simulated TikTok Chat Overlay (Bottom 35%)</div>
+      <div id="ttChatFeed"></div>
+      <div class="tt-input-bar">
+        <span>Add comment... (1/2/3, stab troll, !act ...)</span>
+        <span>🎁  ❤️  ↗️</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: INTERACTIVE SIMULATOR & PLAYTEST DASHBOARD -->
+  <div class="sim-panel">
+    <div class="sim-header">
+      <div>
+        <h1>🥚 Oddshire Prototype (v2 + Gacha Shrine)</h1>
+        <p>72px Header Safe · Windowed Sky Master Auction · !pull Gacha Shrine · Contested Throne · Safe Camera Clamping</p>
+      </div>
+      <div class="row">
+        <button onclick="toggleTikTokOverlays()">👁️ Toggle TikTok Overlays</button>
+        <button class="mint" onclick="resolveRPBatch()">⚡ Resolve 8s RP Tick</button>
+      </div>
+    </div>
+
+    <div class="telemetry-grid">
+      <div class="stat-box"><div class="lbl">Active Avatars</div><div class="val" id="telAvatars">42</div></div>
+      <div class="stat-box"><div class="lbl">LLM / Same-Tick Cap</div><div class="val" id="telQueue">0 / 15</div></div>
+      <div class="stat-box"><div class="lbl">Filtered Chatter</div><div class="val" id="telFiltered">0</div></div>
+      <div class="stat-box"><div class="lbl">Est. AI Cost</div><div class="val" id="telCost">$0.00/hr</div></div>
+    </div>
+
+    <!-- PLAY AS A VIEWER -->
+    <div class="card">
+      <h2><span>🎮 Play Yourself (Persistent ▼ YOU Beacon)</span><span class="hint">Applied: +3 Class Bonus · Proficiency Cap · Blacksmith Gear</span></h2>
+      <div class="row">
+        <input id="playerName" value="@You" style="width: 115px" oninput="renderMySheet()" />
+        <button class="active-cls" id="cls-knight" onclick="setMyClass('knight')">⚔️ Knight (+3 Cbt)</button>
+        <button id="cls-wizard" onclick="setMyClass('wizard')">🧙‍♂️ Wizard (+3 Mag)</button>
+        <button id="cls-rogue" onclick="setMyClass('rogue')">🥷 Rogue (+3 Stl)</button>
+        <button id="cls-bard" onclick="setMyClass('bard')">🪕 Bard (+3 Chm)</button>
+      </div>
+      <div class="my-sheet" id="mySheet"></div>
+      <div class="row">
+        <button onclick="sendVote(1)">Vote 1</button>
+        <button onclick="sendVote(2)">Vote 2</button>
+        <button onclick="sendVote(3)">Vote 3</button>
+        <button onclick="pingMe()">📍 !me Beacon</button>
+        <button class="mint" onclick="upgradeGear()">⚒️ !upgrade Gear</button>
+        <button class="gold" onclick="pullGacha(false)">🥚 !pull Gacha (250g)</button>
+        <button onclick="challengeThrone()">👑 !throne (100g Ante)</button>
+        <button onclick="attemptPickpocket()">🥷 !steal (Tavern/Frontier)</button>
+      </div>
+      <div class="row">
+        <input id="rpInput" class="grow" placeholder="Try: 'stab troll' or '!act I cast fireball on the bridge!'" onkeydown="if(event.key==='Enter') submitChat(false)" />
+        <button class="primary" onclick="submitChat(false)">💬 Send RP</button>
+        <button onclick="submitChat(true)">💬 Chatter ("i love this stream")</button>
+        <button class="purple" id="miniDmBtn" onclick="useMiniDMScroll()" disabled>📜 Use F2P Mini-Master Scroll (0)</button>
+      </div>
+    </div>
+
+    <!-- WINDOWED GIFT AUCTION & SKY MASTER -->
+    <div class="card">
+      <h2><span>🎁 Windowed Gift Auction &amp; Sky Master (3-Min Reign)</span><span id="dmWindowInfo" class="hint">Cumulative Ledger Active</span></h2>
+      <div class="row">
+        <button onclick="sendGift('@You', 1, 'Rose')">🌹 Rose (1💎 · 3m +3 Luck, No Cam Hijack)</button>
+        <button class="rose" onclick="sendGift('@LuckyViewer', 50, 'Elite Slime')">👹 Queue Elite (50💎 · 50% Bounty)</button>
+        <button class="gold" onclick="addDMGift('@DiamondOverlord', 200)">👑 @DiamondOverlord +200💎</button>
+        <button class="purple" onclick="addDMGift('@RivalWhale', 180)">🔥 @RivalWhale +180💎 Streak</button>
+        <button class="purple" onclick="addDMGift('@RivalWhale', 60)">⚡ +60💎 Combo (Usurp!)</button>
+        <button class="mint" id="defendDmBtn" onclick="defendDM()" disabled>🛡️ Defend Once (+50💎 / +2m)</button>
+      </div>
+      <div class="row">
+        <input id="dmInput" class="grow" placeholder="!sm Turn everyone into frogs! (Bounded reign budget)" />
+        <button class="gold" onclick="issueDMCommand()">⚡ !sm Twist</button>
+      </div>
+      <div class="row">
+        <button onclick="quickDM('Turn everyone into bouncing frogs + 2x Gold Rain!')">🐸 Frog Mode + 2x Gold</button>
+        <button onclick="quickDM('Floor is Lava! Type !jump within 8s or take damage!')">🌋 Floor is Lava</button>
+        <button onclick="quickDM('Summon Giant Tax-Collector Crab!')">🦀 Tax Crab Boss</button>
+      </div>
+    </div>
+
+    <!-- CROWD & CAMERA STRESS TESTS -->
+    <div class="card">
+      <h2><span>🧪 Stress Tests &amp; Camera Priority Verification</span></h2>
+      <div class="row">
+        <button onclick="spawnJoinerWagon(12)">🚐 Wagon Batch (+12)</button>
+        <button onclick="simulateChatFlood(24)">🔥 24-Player Flood (15 LLM + 9 Instant)</button>
+        <button onclick="forceCritTest(20)">🌟 Nat 20 (Earns Mini-Master Scroll!)</button>
+        <button class="gold" onclick="pullGacha(true)">🥚 Force Mythic Gacha Pull</button>
+        <button onclick="forceCritTest(1)">💀 Nat 1 Fail</button>
+        <button onclick="rotateChapter()">🔄 Next Macro Chapter</button>
+      </div>
+      <p class="hint">
+        Fixes verified: (1) 3s Camera Cut Cooldown prevents whiplash; (2) Frustum Y-clamp keeps spotlighted chibis above TikTok's bottom 35%; (3) Sky Master sits at Y:282 clear of the top HUD; (4) All 24 flood actions resolve in the SAME 8s tick with aggregated summary + rolling label carousel.
+      </p>
+    </div>
+  </div>
+
+<script>
+// ================= CORE CONSTANTS & BOUNDED RPG MATH =================
+const CLASSES = {
+  knight: { icon: '⚔️', color: '#60a5fa', bonusTag: 'combat' },
+  wizard: { icon: '🧙‍♂️', color: '#a78bfa', bonusTag: 'magic' },
+  rogue:  { icon: '🥷', color: '#34d399', bonusTag: 'stealth' },
+  bard:   { icon: '🪕', color: '#f472b6', bonusTag: 'charm' }
+};
+
+const GEAR_TIERS = [
+  { name: 'Wooden',      cost: 0,     bonus: 0, aura: null },
+  { name: 'Iron',        cost: 250,   bonus: 1, aura: '#cbd5e1' },
+  { name: 'Steel',       cost: 1000,  bonus: 2, aura: '#60a5fa' },
+  { name: 'Mithril',     cost: 5000,  bonus: 3, aura: '#34d399' },
+  { name: 'Dragonforged',cost: 25000, bonus: 4, aura: '#fbbf24' }
+];
+
+const GACHA_POOL = [
+  { id: 'straw-hat',   rarity: 'Common', weight: 60, bonus: 1, icon: '👒', name: 'Cozy Turnip Hat',   color: '#cbd5e1' },
+  { id: 'glow-blade',  rarity: 'Rare',   weight: 28, bonus: 2, icon: '🗡️', name: 'Moonlit Blade',     color: '#60a5fa' },
+  { id: 'fairy-wings', rarity: 'Epic',   weight: 10, bonus: 3, icon: '🦋', name: 'Starlight Wings',   color: '#c084fc' },
+  { id: 'frog-crown',  rarity: 'Mythic', weight: 2,  bonus: 4, icon: '🐸', name: 'Golden Frog Crown', color: '#fbbf24' }
+];
+
+const CHAPTERS = [
+  {
+    mode: 'Monster Crusade', tier: 1,
+    title: 'Chapter I: The Goblin Toll Bridge',
+    narration: 'A mossy troll blocks the Frontier Gate! Type 1/2/3 or !act to strike!',
+    choices: ['1: Shield Charge', '2: Arch Sneak', '3: Turnip Bribe'],
+    bossName: 'Mossy Toll Troll'
+  },
+  {
+    mode: 'Village Chaos & Heists', tier: 2,
+    title: 'Chapter II: Midnight Tavern Heist',
+    narration: 'Chaos reigns in the Tavern & Frontier! Rob active rivals or raid the vault!',
+    choices: ['1: Pick Vault Lock', '2: Tavern Brawl', '3: Fake Crowns'],
+    bossName: 'Vault Automaton'
+  },
+  {
+    mode: 'Throne & Politics', tier: 2,
+    title: 'Chapter III: Revolt at the Dais',
+    narration: 'Challengers eye the Crown! 100g ante for Contested !throne Duels!',
+    choices: ['1: Tax Revolt', '2: Guard King', '3: Frog Mayor'],
+    bossName: 'Royal Guard Captain'
+  }
+];
+
+function xpNeeded(level) { return Math.floor(100 * Math.pow(level, 1.5)); }
+function profBonus(level) { return Math.min(6, 2 + Math.floor((level - 1) / 4)); }
+
+let chapterIdx = 0;
+let players = new Map();
+let pendingActions = [];
+let filteredNoiseCount = 0;
+let votes = [12, 8, 5];
+let macroTimer = 24.0;
+let batchTimer = 0;
+const BATCH_INTERVAL = 8.0;
+
+let bossMax = 1500, bossHp = 1500, bossName = 'Mossy Toll Troll';
+let contributors = new Set();
+
+// Windowed Cumulative Gift Ledger & Contested Sky Master State
+let dmWindowLedger = new Map();
+let hallOfFame = new Map();
+let currentDM = {
+  name: '🤖 AI Storyteller', isGifter: false, diamonds: 0, timeLeft: 0,
+  hasDefended: false, contestedUntil: 0, challenger: null,
+  reignGoldUsed: 0, reignXpUsed: 0, twist: null
+};
+let worldMutator = null;
+let kingName = '@KnightCommander';
+let kingGraceUntil = 0;
+
+// Camera Director Priority State Machine (3.0s Min Cut Cooldown + Y Clamp)
+const cam = {
+  x: 270, y: 405, zoom: 1.0,
+  targetX: 270, targetY: 405, targetZoom: 1.0,
+  mode: 'Wide Patrol',
+  priority: 0,
+  spotlightUser: null,
+  spotlightUntil: 0,
+  lastCutAt: 0
+};
+
+let wagon = { active: false, x: -60, y: 465, timer: 0 };
+let carouselLabels = [];
+let highlightTimeout = null;
+
+// ================= INITIALIZATION =================
+const SAMPLE_NAMES = [
+  '@ChaoticBard','@KnightCommander','@PocketThief','@ScrollingSam','@WizardWanda',
+  '@TurnipKing','@GoblinFan99','@CozyElena','@DiceGremlin','@PixelPaladin',
+  '@MoonlitRogue','@SirBumbles','@TavernToby','@LootLlama','@BardicBea',
+  '@CritCarl','@SneakyStu','@MageMilo','@DaggerDana','@ShieldShane',
+  '@FrostyFinn','@LuckyLuna','@Oakenshield','@PippinPie','@GrumpyGnome',
+  '@BreezyBram','@SparkleZoe','@VexedVic','@AmberAxe','@NoodleKnight',
+  '@CinderCat','@HootOwl','@MossyMike','@PebblePete','@JesterJay',
+  '@CloverCleric','@SlySoren','@DaringDex','@BrambleBen','@MistyMae'
+];
+
+function createPlayer(name, clsKey, zone) {
+  const cls = clsKey || Object.keys(CLASSES)[Math.floor(Math.random()*4)];
+  const inFrontier = zone === 'frontier' || Math.random() > 0.45;
+  const x = inFrontier ? 305 + Math.random()*190 : 60 + Math.random()*195;
+  const y = 325 + Math.random()*190;
+  const p = {
+    name, cls, level: 1 + Math.floor(Math.random()*4),
+    gold: 120 + Math.floor(Math.random()*220),
+    xp: 0, hp: 100, gearTier: 0,
+    x, y, tx: x, ty: y, zone: inFrontier ? 'frontier' : 'plaza',
+    pendingDice: false, rollBadge: null,
+    lastActive: Date.now(), lastActionAt: 0,
+    luckUntil: 0, guardedUntil: 0, jailedUntil: 0,
+    miniDmScrolls: 0, nat20Streak: 0, bossCapsules: 1,
+    collectibles: {}, equippedItem: null,
+    skin: ['#fde6d8','#f3cfb6','#d6a37e','#8d5b4c'][Math.floor(Math.random()*4)],
+    bobOffset: Math.random()*Math.PI*2
+  };
+  players.set(name, p);
+  return p;
+}
+
+function initWorld() {
+  createPlayer('@You', 'knight', 'plaza');
+  players.get('@You').level = 3;
+  players.get('@You').gold = 340;
+  for (const n of SAMPLE_NAMES) createPlayer(n);
+  const kc = players.get('@KnightCommander');
+  kc.level = 5; kc.gold = 640; kc.gearTier = 2;
+  createPlayer('@DiamondOverlord', 'wizard', 'plaza');
+  createPlayer('@RivalWhale', 'rogue', 'plaza');
+  bossMax = 450 + players.size * 25;
+  bossHp = bossMax;
+  addTikTokChat('@ScrollingSam', 'stab troll');
+  addTikTokChat('@ChaoticBard', '!act I charm the troll with a turnip ballad');
+  addTikTokChat('@KnightCommander', '1');
+  renderMySheet(); renderChoices(); updateAuctionHUD(); updateBossKingPills();
+}
+
+// ================= LEXICON RP FILTER & XSS-SAFE CHAT =================
+const ACTION_VERBS = /\b(attack|hit|stab|slash|shoot|cast|throw|toss|sneak|steal|pickpocket|bribe|heal|drink|jump|dance|dodge|charm|seduce|taunt|block|parry|pet|kick|punch|hide|climb|sing|play|run|bite)\b/i;
+const CHATTER_NOISE = /^(hi|hello|hey|yo|sup|lol|lmao|wtf|nice|cool|gg|ok|w+|\?+|i love this.*|what game is this\??)$/i;
+
+function isRPAction(text) {
+  const clean = text.trim();
+  if (clean.startsWith('!act ')) return { ok: true, priority: true, body: clean.slice(5).trim() };
+  if (CHATTER_NOISE.test(clean)) return { ok: false };
+  if (ACTION_VERBS.test(clean)) return { ok: true, priority: false, body: clean };
+  return { ok: false };
+}
+
+function getActionCategory(text) {
+  const low = text.toLowerCase();
+  if (/cast|spell|fire|ice|lightning|magic|heal|blast/.test(low)) return 'magic';
+  if (/sneak|steal|pickpocket|hide|backstab|grease|trap/.test(low)) return 'stealth';
+  if (/sing|charm|seduce|bribe|lute|ballad|dance|persuade/.test(low)) return 'charm';
+  return 'combat';
+}
+
+function getMyName() {
+  let n = document.getElementById('playerName').value.trim() || '@You';
+  if (!n.startsWith('@')) n = '@' + n;
+  if (!players.has(n)) createPlayer(n, 'knight', 'plaza');
+  return n;
+}
+
+function addTikTokChat(user, msg) {
+  const feed = document.getElementById('ttChatFeed');
+  const div = document.createElement('div');
+  div.className = 'tt-chat-line';
+  const span = document.createElement('span');
+  span.textContent = user;
+  div.appendChild(span);
+  div.appendChild(document.createTextNode(msg));
+  feed.appendChild(div);
+  while (feed.children.length > 4) feed.removeChild(feed.firstChild);
+}
+
+function setMyClass(cls) {
+  const me = players.get(getMyName());
+  me.cls = cls; me.lastActive = Date.now();
+  document.querySelectorAll('[id^="cls-"]').forEach(b => b.classList.remove('active-cls'));
+  document.getElementById('cls-' + cls).classList.add('active-cls');
+  renderMySheet(); addTikTokChat(me.name, `!class ${cls}`);
+}
+
+function pingMe() {
+  const me = players.get(getMyName());
+  me.lastActive = Date.now();
+  addTikTokChat(me.name, '!me');
+  enqueueSpotlightLabel(me.name, 6000);
+  requestCamera(me.x, me.y, 1.35, `📍 !me Ping: ${me.name}`, 2, me.name, 2600);
+}
+
+function upgradeGear() {
+  const me = players.get(getMyName());
+  const nextTier = GEAR_TIERS[me.gearTier + 1];
+  if (!nextTier) { showHighlight(`⚒️ ${me.name} already wields Mythic Dragonforged gear!`); return; }
+  if (me.gold < nextTier.cost) {
+    showHighlight(`⚒️ Need ${nextTier.cost}g for ${nextTier.name} Gear (you have ${me.gold}g)!`);
+    return;
+  }
+  me.gold -= nextTier.cost;
+  me.gearTier++;
+  addTikTokChat(me.name, `!upgrade → ${nextTier.name}`);
+  showHighlight(`⚒️ BLACKSMITH FORGE: ${me.name} crafted ${nextTier.name} Gear (+${nextTier.bonus} Rolls)!`);
+  renderMySheet(); updateBossKingPills();
+}
+
+function getCollectibleBonus(p) {
+  if (!p || !p.equippedItem) return 0;
+  const base = p.equippedItem.bonus || 0;
+  const stars = p.collectibles[p.equippedItem.id] || 1;
+  return base + (stars >= 3 ? 1 : 0);
+}
+
+function pullGacha(forceMythic) {
+  const me = players.get(getMyName());
+  me.lastActive = Date.now();
+  me.zone = 'plaza'; me.tx = 205; me.ty = 445;
+
+  let usedFree = false;
+  if (!forceMythic) {
+    if (me.bossCapsules > 0) { me.bossCapsules--; usedFree = true; }
+    else if (me.gold >= 250) { me.gold -= 250; }
+    else { showHighlight(`🥚 Need 250g or a Boss Capsule to pull at the Gacha Shrine!`); return; }
+  }
+
+  let drop = GACHA_POOL[0];
+  if (forceMythic) {
+    drop = GACHA_POOL[3];
+  } else {
+    const roll = Math.random() * 100;
+    let acc = 0;
+    for (const item of GACHA_POOL) { acc += item.weight; if (roll <= acc) { drop = item; break; } }
+  }
+
+  const prevStars = me.collectibles[drop.id] || 0;
+  const newStars = Math.min(3, prevStars + 1);
+  me.collectibles[drop.id] = newStars;
+  if (!me.equippedItem || drop.bonus >= me.equippedItem.bonus) me.equippedItem = drop;
+
+  const starText = '★'.repeat(newStars);
+  const costTag = forceMythic ? 'Mythic Test' : (usedFree ? 'Free Boss Capsule' : '250g');
+  addTikTokChat(me.name, `!pull → ${drop.icon} ${drop.name} (${drop.rarity} ${starText})`);
+  me.rollBadge = { val: 20, text: `${drop.icon} ${drop.rarity} ${starText}`, color: drop.color, until: Date.now() + 4500 };
+  enqueueSpotlightLabel(me.name, 5000);
+
+  if (drop.rarity === 'Mythic' || drop.rarity === 'Epic') {
+    showHighlight(`🥚 ${drop.rarity.toUpperCase()} CAPSULE! ${me.name} unboxed ${drop.icon} ${drop.name} ${starText}!`);
+    requestCamera(210, 440, 1.44, `🥚 ${drop.rarity} Pull: ${me.name}`, 2, me.name, 3200);
+  } else {
+    setBatchFeed(`🥚 Gacha Shrine (${costTag}): ${me.name} popped ${drop.icon} ${drop.name} ${starText}!`, `Collectible bonus: +${getCollectibleBonus(me)} to rolls`);
+  }
+  renderMySheet();
+}
+
+function sendVote(idx) {
+  const me = players.get(getMyName());
+  me.lastActive = Date.now();
+  contributors.add(me.name);
+  votes[idx - 1]++;
+  renderChoices(); addTikTokChat(me.name, `${idx}`);
+}
+
+function sendMove(zone) {
+  const me = players.get(getMyName());
+  me.zone = zone; me.lastActive = Date.now();
+  me.tx = zone === 'frontier' ? 350 + Math.random()*110 : 100 + Math.random()*115;
+  me.ty = 335 + Math.random()*130;
+  addTikTokChat(me.name, zone === 'frontier' ? '!quest' : '!plaza');
+  renderMySheet();
+}
+
+function submitChat(forceNoise) {
+  const me = players.get(getMyName());
+  if (Date.now() < me.jailedUntil) {
+    showHighlight(`⛓️ ${me.name} is in the Plaza Pillory! (${Math.ceil((me.jailedUntil-Date.now())/1000)}s left)`);
+    return;
+  }
+  me.lastActive = Date.now();
+  const input = document.getElementById('rpInput');
+  const raw = forceNoise ? 'i love this stream so much' : (input.value.trim() || 'stab troll');
+  if (!forceNoise) input.value = '';
+  addTikTokChat(me.name, raw);
+
+  const check = isRPAction(raw);
+  if (!check.ok) {
+    filteredNoiseCount++;
+    updateTelemetry();
+    return;
+  }
+  enqueueAction(me, check.body, check.priority);
+}
+
+function enqueueAction(p, text, priority) {
+  p.pendingDice = true; p.lastActive = Date.now();
+  contributors.add(p.name);
+  if (priority) pendingActions.unshift({ player: p, text });
+  else pendingActions.push({ player: p, text });
+  enqueueSpotlightLabel(p.name, 5500);
+  updateTelemetry();
+}
+
+// ================= CONTESTED THRONE & SANCTUARY PICKPOCKET =================
+function challengeThrone() {
+  const me = players.get(getMyName());
+  if (me.name === kingName) { showHighlight(`👑 You already sit upon the Village Throne!`); return; }
+  if (Date.now() < kingGraceUntil) {
+    showHighlight(`🛡️ ${kingName} has Coronation Grace (${Math.ceil((kingGraceUntil-Date.now())/1000)}s left)!`);
+    return;
+  }
+  if (me.gold < 100) { showHighlight(`👑 Need 100g ante to challenge the Throne!`); return; }
+
+  me.gold -= 100;
+  me.zone = 'plaza'; me.tx = 160; me.ty = 355;
+  const king = players.get(kingName) || createPlayer(kingName, 'knight', 'plaza');
+
+  const chRoll = 1 + Math.floor(Math.random()*20) + profBonus(me.level) + GEAR_TIERS[me.gearTier].bonus + getCollectibleBonus(me);
+  const kingRoll = 1 + Math.floor(Math.random()*20) + profBonus(king.level) + GEAR_TIERS[king.gearTier].bonus + getCollectibleBonus(king);
+  addTikTokChat(me.name, '!throne (100g ante)');
+
+  if (chRoll > kingRoll) {
+    const oldKing = kingName;
+    kingName = me.name;
+    kingGraceUntil = Date.now() + 180000;
+    showHighlight(`👑 CONTESTED THRONE! ${me.name} (🎲${chRoll}) beat ${oldKing} (🎲${kingRoll})!`);
+    setBatchFeed(`👑 Throne Duel: ${me.name} (${chRoll}) dethroned ${oldKing} (${kingRoll})!`, `100g Treasury Ante claimed · 3m Coronation Grace active`);
+    requestCamera(160, 355, 1.45, `👑 New King: ${me.name}!`, 3, me.name, 3000);
+  } else {
+    king.gold += 50;
+    setBatchFeed(`🛡️ ${kingName} (🎲${kingRoll}) repelled ${me.name} (🎲${chRoll})!`, `King keeps Throne +50g ante (No camera hijack on failed challenge)`);
+  }
+  updateBossKingPills(); renderMySheet();
+}
+
+function attemptPickpocket() {
+  const me = players.get(getMyName());
+  if (Date.now() < me.jailedUntil) {
+    showHighlight(`⛓️ Can't steal from inside the Plaza Pillory!`); return;
+  }
+  if (me.zone === 'plaza' && CHAPTERS[chapterIdx].mode !== 'Village Chaos & Heists') {
+    showHighlight(`🛡️ The Plaza is a Safe Sanctuary! Move to !quest Frontier or wait for Chaos Chapter!`);
+    return;
+  }
+  const targets = [...players.values()].filter(p => p.name !== me.name && p.gold >= 40 && Date.now() > p.guardedUntil);
+  const target = targets[Math.floor(Math.random()*targets.length)];
+  if (!target) { showHighlight(`🛡️ No unguarded targets nearby!`); return; }
+
+  const mod = profBonus(me.level) + (me.cls === 'rogue' ? 3 : 0);
+  const total = 1 + Math.floor(Math.random()*20) + mod;
+  addTikTokChat(me.name, `!steal ${target.name}`);
+
+  if (total >= 14) {
+    const stolen = Math.max(10, Math.min(80, Math.floor(target.gold * 0.15)));
+    target.gold -= stolen; target.guardedUntil = Date.now() + 300000;
+    me.gold += stolen;
+    me.rollBadge = { val: total, text: `🎲${total} +${stolen}g!`, color: '#34d399', until: Date.now()+4000 };
+    setBatchFeed(`🥷 Heist! ${me.name} lifted ${stolen}g from ${target.name} (15% cap)!`, `${target.name} gained Guarded immunity!`);
+  } else {
+    const fine = Math.min(me.gold, 50);
+    me.gold -= fine;
+    me.jailedUntil = Date.now() + 45000;
+    me.zone = 'plaza'; me.tx = 85; me.ty = 410;
+    me.rollBadge = { val: total, text: `⛓️ JAILED!`, color: '#fb7185', until: Date.now()+4000 };
+    setBatchFeed(`⛓️ BUSTED! ${me.name} fined ${fine}g & locked in Plaza Pillory (45s)!`, `Prevents zero-risk 0g thief spam`);
+  }
+  enqueueSpotlightLabel(me.name, 4500);
+  renderMySheet();
+}
+
+// ================= TWO-TIER SAME-TICK 8s BATCH RESOLVER =================
+function resolveRPBatch() {
+  batchTimer = 0;
+
+  if (pendingActions.length === 0) {
+    const topIdx = votes.indexOf(Math.max(...votes));
+    const localDmg = Math.max(15, votes[topIdx] * 4);
+    bossHp = Math.max(0, bossHp - localDmg);
+    setBatchFeed(`🤖 [0-Token Local Tick] Option ${topIdx+1} rallied party (-${localDmg} Boss HP)!`, `0 RP actions queued → $0.00 AI tokens spent`);
+    checkBossDefeat();
+    updateBossKingPills();
+    updateTelemetry();
+    return;
+  }
+
+  const allBatch = pendingActions.splice(0, pendingActions.length);
+  const llmSlice = allBatch.slice(0, 15);
+  const overflowSlice = allBatch.slice(15);
+
+  let dmgTotal = 0;
+  const crits = [];
+  const fails = [];
+  let spotlightCrit = null;
+  const tierDC = 11 + CHAPTERS[chapterIdx].tier;
+
+  allBatch.forEach((item, idx) => {
+    const p = item.player;
+    p.pendingDice = false;
+    const rawD20 = 1 + Math.floor(Math.random()*20);
+    const cat = getActionCategory(item.text);
+    const classMod = (CLASSES[p.cls].bonusTag === cat) ? 3 : 0;
+    const luckMod = Date.now() < p.luckUntil ? 3 : 0;
+    const gearMod = GEAR_TIERS[p.gearTier].bonus + getCollectibleBonus(p);
+    const total = rawD20 + profBonus(p.level) + classMod + luckMod + gearMod;
+    const goldMult = worldMutator === '2xgold' ? 2 : 1;
+
+    if (rawD20 === 20) {
+      const gold = 85 * goldMult;
+      p.gold += gold; gainXP(p, 55); dmgTotal += 60;
+      p.nat20Streak++;
+      if (p.nat20Streak >= 1) {
+        p.miniDmScrolls++;
+        p.nat20Streak = 0;
+      }
+      p.rollBadge = { val: 20, text: `🎲20 CRIT!`, color: '#fbbf24', until: Date.now()+4200 };
+      crits.push(p.name);
+      spotlightCrit = p;
+    } else if (rawD20 === 1) {
+      p.gold = Math.max(0, p.gold - 15);
+      p.rollBadge = { val: 1, text: `🎲1 FAIL!`, color: '#fb7185', until: Date.now()+4200 };
+      fails.push(p.name);
+      if (!spotlightCrit) spotlightCrit = p;
+    } else if (total >= tierDC) {
+      const gold = (18 + Math.floor(Math.random()*20)) * goldMult;
+      p.gold += gold; gainXP(p, 25); dmgTotal += 24;
+      p.rollBadge = { val: total, text: `🎲${total}${classMod?'+Cls':''}`, color: '#34d399', until: Date.now()+3600 };
+    } else {
+      gainXP(p, 10);
+      p.rollBadge = { val: total, text: `🎲${total} MISS`, color: '#94a3b8', until: Date.now()+3000 };
+    }
+
+    if (idx < 6) enqueueSpotlightLabel(p.name, 4500);
+  });
+
+  bossHp = Math.max(0, bossHp - dmgTotal);
+
+  const critText = crits.length ? `🌟 Crits: ${crits.join(', ')}` : (fails.length ? `💀 Fails: ${fails.join(', ')}` : 'Solid skirmish!');
+  const overflowNote = overflowSlice.length ? ` · +${overflowSlice.length} instant same-tick` : '';
+  setBatchFeed(
+    `⚔️ ${allBatch.length} Heroes acted (${llmSlice.length} AI${overflowNote}) → ${dmgTotal} Boss dmg!`,
+    critText
+  );
+
+  if (spotlightCrit) {
+    const is20 = spotlightCrit.rollBadge.val === 20;
+    if (is20) showHighlight(`🏆 NAT 20! ${spotlightCrit.name} unlocked a F2P Mini-Master Scroll!`);
+    requestCamera(spotlightCrit.x, spotlightCrit.y, 1.42,
+      is20 ? `🌟 Nat 20: ${spotlightCrit.name}` : `💀 Nat 1: ${spotlightCrit.name}`,
+      2, spotlightCrit.name, 3200);
+  }
+
+  checkBossDefeat();
+  updateBossKingPills(); renderMySheet(); updateTelemetry();
+}
+
+function gainXP(p, amt) {
+  p.xp += amt;
+  while (p.xp >= xpNeeded(p.level)) {
+    p.xp -= xpNeeded(p.level);
+    p.level++;
+  }
+}
+
+function checkBossDefeat() {
+  if (bossHp > 0) return;
+  for (const name of contributors) {
+    const p = players.get(name);
+    if (p) { p.gold += 110; p.bossCapsules++; gainXP(p, 60); }
+  }
+  showHighlight(`🐉 BOSS SLAIN! ${contributors.size} contributors earned +110g & 1 Free Capsule!`);
+  contributors.clear();
+  rotateChapter();
+}
+
+// ================= WINDOWED CUMULATIVE GIFT LEDGER & CONTESTED SKY MASTER =================
+function sendGift(senderName, diamonds, giftName) {
+  if (!players.has(senderName)) createPlayer(senderName, 'wizard', 'plaza');
+  const p = players.get(senderName);
+  p.lastActive = Date.now();
+  hallOfFame.set(senderName, (hallOfFame.get(senderName) || 0) + diamonds);
+  addTikTokChat(senderName, `🎁 Sent ${giftName} (${diamonds}💎)`);
+
+  if (diamonds < 20) {
+    p.luckUntil = Date.now() + 180000;
+    setBatchFeed(`🌹 ${senderName} sent ${giftName} → +3 Luck for 3 mins!`, `No camera hijack on micro-gifts`);
+  } else if (diamonds < 200) {
+    bossHp += 250; bossMax += 250;
+    p.gold += 150;
+    showHighlight(`👹 ${senderName} added an Elite Miniboss (+250 HP & 50% Bounty)!`);
+    updateBossKingPills();
+  }
+}
+
+function addDMGift(name, diamonds) {
+  if (!players.has(name)) createPlayer(name, 'wizard', 'plaza');
+  const prev = dmWindowLedger.get(name) || 0;
+  const total = prev + diamonds;
+  dmWindowLedger.set(name, total);
+  hallOfFame.set(name, (hallOfFame.get(name) || 0) + diamonds);
+  addTikTokChat(name, `🎁 Dropped +${diamonds}💎 (Window Total: ${total}💎)`);
+
+  if (!currentDM.isGifter) {
+    if (total < 200) {
+      updateAuctionHUD();
+      setBatchFeed(`💎 ${name} reached ${total}/200💎 toward empty Sky Master Throne!`, `Cumulative window ledger tracks combos`);
+      return;
+    }
+    crownSkyDM(name, total, false);
+  } else if (name === currentDM.name) {
+    currentDM.diamonds = total;
+    updateAuctionHUD();
+  } else if (total > currentDM.diamonds) {
+    if (!currentDM.hasDefended && currentDM.contestedUntil === 0) {
+      currentDM.contestedUntil = Date.now() + 20000;
+      currentDM.challenger = { name, total };
+      showHighlight(`⚡ THRONE CONTESTED! ${name} (${total}💎) challenges ${currentDM.name}! Ruler has 20s to Defend!`);
+      document.getElementById('defendDmBtn').disabled = false;
+      updateAuctionHUD();
+    } else {
+      crownSkyDM(name, total, true);
+    }
+  } else {
+    updateAuctionHUD();
+  }
+}
+
+function defendDM() {
+  if (!currentDM.isGifter || currentDM.hasDefended) return;
+  const boost = 100;
+  const newTotal = (dmWindowLedger.get(currentDM.name) || currentDM.diamonds) + boost;
+  dmWindowLedger.set(currentDM.name, newTotal);
+  hallOfFame.set(currentDM.name, (hallOfFame.get(currentDM.name) || 0) + boost);
+  currentDM.diamonds = newTotal;
+  currentDM.hasDefended = true;
+  currentDM.contestedUntil = 0;
+  currentDM.challenger = null;
+  currentDM.timeLeft += 120;
+  document.getElementById('defendDmBtn').disabled = true;
+  showHighlight(`🛡️ ${currentDM.name} DEFENDED (+${boost}💎 → ${newTotal}💎, +2m)!`);
+  updateAuctionHUD();
+}
+
+function crownSkyDM(name, totalDiamonds, usurped) {
+  currentDM = {
+    name, isGifter: true, diamonds: totalDiamonds, timeLeft: 180,
+    hasDefended: false, contestedUntil: 0, challenger: null,
+    reignGoldUsed: 0, reignXpUsed: 0, twist: null
+  };
+  document.getElementById('defendDmBtn').disabled = true;
+  showHighlight(usurped ? `⚡ SKY MASTER USURPED! ${name} (${totalDiamonds}💎) rules the Sky!` : `👑 ${name} (${totalDiamonds}💎) claimed the 3m Sky Master Throne!`);
+  requestCamera(270, 275, 1.18, `👑 Sky Master: ${name}`, 4, null, 3200);
+  updateAuctionHUD();
+}
+
+function useMiniDMScroll() {
+  const me = players.get(getMyName());
+  if (me.miniDmScrolls <= 0) return;
+  if (currentDM.isGifter) { showHighlight(`📜 Wait for paid Sky Master window to end before using Mini-Master Scroll!`); return; }
+  me.miniDmScrolls--;
+  currentDM = { name: `${me.name} (Free Scroll)`, isGifter: true, diamonds: 0, timeLeft: 60, hasDefended: true, contestedUntil: 0, challenger: null, reignGoldUsed: 0, reignXpUsed: 0, twist: null };
+  quickDM('Free F2P Mini-Master Chaos: 2x Gold Rain & Giant Duck Boss!');
+  renderMySheet();
+}
+
+function issueDMCommand() {
+  const txt = document.getElementById('dmInput').value.trim();
+  if (!txt) return;
+  document.getElementById('dmInput').value = '';
+  quickDM(txt.replace(/^!(sm|dm)\s+/i, ''));
+}
+
+function quickDM(twist) {
+  if (!currentDM.isGifter) addDMGift('@DiamondOverlord', 200);
+  currentDM.twist = twist;
+  const low = twist.toLowerCase();
+  worldMutator = low.includes('frog') ? 'frog' : (low.includes('lava') ? 'lava' : (low.includes('gold') || low.includes('2x') ? '2xgold' : null));
+  if (low.includes('crab') || low.includes('duck') || low.includes('boss')) {
+    bossName = low.includes('crab') ? 'Giant Tax Crab' : (low.includes('duck') ? 'Giant Evil Duck' : 'Sky Boss');
+    bossMax = 650 + players.size * 15; bossHp = bossMax;
+    updateBossKingPills();
+  }
+  document.getElementById('plotTitle').textContent = `🎲 SKY TWIST by ${currentDM.name}!`;
+  document.getElementById('plotNarration').textContent = twist;
+  showHighlight(`⚡ SKY MASTER COMMAND: "${twist}"`);
+  requestCamera(270, 280, 1.15, `⚡ Sky Master Twist!`, 4, null, 3000);
+}
+
+// ================= STRESS TESTS & CAMERA PRIORITY STATE MACHINE =================
+function spawnJoinerWagon(count) {
+  wagon = { active: true, x: -60, y: 465, timer: 4.0 };
+  for (let i = 0; i < count; i++) {
+    const p = createPlayer(`@Joiner_${Math.floor(100+Math.random()*899)}`, null, 'plaza');
+    p.x = 70; p.y = 465; p.tx = 95 + Math.random()*135; p.ty = 335 + Math.random()*140;
+  }
+  setBatchFeed(`🚐 Arrival Wagon unloaded ${count} new players!`, `Batched camera pan (Priority 1 — won't interrupt Nat 20s or Sky Master!)`);
+  requestCamera(105, 445, 1.32, `🚐 Wagon (+${count})`, 1, null, 2800);
+  updateTelemetry();
+}
+
+function simulateChatFlood(count) {
+  const actions = ['stab troll', 'cast fireball at troll', 'sneak behind boss', 'sing lute solo', 'throw turnip at boss', 'bribe goblin'];
+  const all = [...players.values()];
+  for (let i = 0; i < count; i++) {
+    const p = all[Math.floor(Math.random()*all.length)];
+    enqueueAction(p, actions[Math.floor(Math.random()*actions.length)], i < 5);
+  }
+}
+
+function forceCritTest(val) {
+  const me = players.get(getMyName());
+  if (val === 20) me.miniDmScrolls++;
+  me.rollBadge = { val, text: val === 20 ? '🎲20 NAT CRIT!' : '🎲1 EPIC FAIL!', color: val === 20 ? '#fbbf24' : '#fb7185', until: Date.now()+4500 };
+  enqueueSpotlightLabel(me.name, 5000);
+  showHighlight(val === 20 ? `🏆 NAT 20! ${me.name} earned a F2P Mini-Master Scroll!` : `💀 NAT 1! ${me.name} tripped into a turnip cart!`);
+  requestCamera(me.x, me.y, 1.45, val === 20 ? `🌟 Nat 20: ${me.name}` : `💀 Nat 1: ${me.name}`, 2, me.name, 3200);
+  renderMySheet();
+}
+
+function rotateChapter() {
+  chapterIdx = (chapterIdx + 1) % CHAPTERS.length;
+  const ch = CHAPTERS[chapterIdx];
+  bossName = ch.bossName;
+  bossMax = 450 + players.size * 25;
+  bossHp = bossMax;
+  votes = [4 + Math.floor(Math.random()*8), 3 + Math.floor(Math.random()*7), 2 + Math.floor(Math.random()*6)];
+  worldMutator = null;
+  document.getElementById('plotTitle').textContent = ch.title;
+  document.getElementById('plotNarration').textContent = ch.narration;
+  updateBossKingPills(); renderChoices(); updateAuctionHUD();
+}
+
+function requestCamera(x, y, zoom, mode, priority, spotlightUser, durationMs) {
+  const now = Date.now();
+  if ((now - cam.lastCutAt) < 3000 && priority <= cam.priority) return;
+
+  const clampedY = Math.min(435, Math.max(245, y));
+  cam.targetX = Math.min(430, Math.max(110, x));
+  cam.targetY = clampedY;
+  cam.targetZoom = Math.min(1.48, zoom);
+  cam.mode = mode; cam.priority = priority;
+  cam.spotlightUser = spotlightUser;
+  cam.spotlightUntil = now + durationMs;
+  cam.lastCutAt = now;
+  document.getElementById('camPill').textContent = `🎥 ${mode}`;
+}
+
+function enqueueSpotlightLabel(name, durationMs) {
+  const now = Date.now();
+  carouselLabels = carouselLabels.filter(l => l.name !== name && l.until > now);
+  carouselLabels.push({ name, until: now + durationMs });
+  if (carouselLabels.length > 6) carouselLabels.shift();
+}
+
+// ================= HUD UPDATES =================
+function toggleTikTokOverlays() {
+  document.getElementById('tiktokOverlay').classList.toggle('hidden');
+  document.getElementById('ttTopHeader').classList.toggle('hidden');
+}
+
+function showHighlight(msg) {
+  const el = document.getElementById('highlightBanner');
+  el.textContent = msg; el.classList.add('visible');
+  clearTimeout(highlightTimeout);
+  highlightTimeout = setTimeout(() => el.classList.remove('visible'), 3600);
+}
+
+function setBatchFeed(main, sub) {
+  document.getElementById('batchSummaryLine').textContent = main;
+  document.getElementById('batchSubLines').textContent = sub;
+}
+
+function updateAuctionHUD() {
+  const bar = document.getElementById('auctionBar');
+  const dmPill = document.getElementById('dmPill');
+  const usurpPill = document.getElementById('usurpPill');
+
+  if (currentDM.isGifter) {
+    const m = Math.floor(currentDM.timeLeft / 60), s = String(Math.floor(currentDM.timeLeft % 60)).padStart(2,'0');
+    dmPill.textContent = `👑 Sky Master: ${currentDM.name} (${m}:${s} | ${currentDM.diamonds}💎)`;
+    if (currentDM.contestedUntil > 0) {
+      bar.classList.add('contested');
+      const rem = Math.max(0, Math.ceil((currentDM.contestedUntil - Date.now())/1000));
+      usurpPill.textContent = `⚡ CONTESTED (${rem}s)! ${currentDM.challenger.name} ${currentDM.challenger.total}💎!`;
+    } else {
+      bar.classList.remove('contested');
+      let topChallenger = null, topAmt = 0;
+      for (const [u, amt] of dmWindowLedger) {
+        if (u !== currentDM.name && amt > topAmt) { topAmt = amt; topChallenger = u; }
+      }
+      usurpPill.textContent = topChallenger
+        ? `⚔️ ${topChallenger}: ${topAmt}/${currentDM.diamonds + 1}💎`
+        : `⚔️ Usurp Floor: ${currentDM.diamonds + 1}💎`;
+    }
+  } else {
+    bar.classList.remove('contested');
+    dmPill.textContent = `🤖 AI Storyteller · ${CHAPTERS[chapterIdx].mode}`;
+    let topU = null, topA = 0;
+    for (const [u, amt] of dmWindowLedger) { if (amt > topA) { topA = amt; topU = u; } }
+    usurpPill.textContent = topU ? `👑 Progress: ${topU} ${topA}/200💎` : `👑 Claim Sky Master: 200💎`;
+  }
+
+  const topDonor = [...hallOfFame.entries()].sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('dmWindowInfo').textContent = topDonor
+    ? `Hall of Fame #1: ${topDonor[0]} (${topDonor[1]}💎 lifetime)`
+    : `Windowed Cumulative Gift Ledger Active`;
+}
+
+function updateBossKingPills() {
+  const k = players.get(kingName);
+  document.getElementById('kingPill').textContent = `👑 King: ${kingName} (Lv.${k ? k.level : 1})`;
+  document.getElementById('bossPill').textContent = `👹 ${bossName}: ${bossHp}/${bossMax} HP`;
+}
+
+function renderChoices() {
+  const ch = CHAPTERS[chapterIdx];
+  const sum = Math.max(1, votes[0] + votes[1] + votes[2]);
+  document.getElementById('choicesGrid').innerHTML = ch.choices.map((label, i) => {
+    const pct = Math.round((votes[i] / sum) * 100);
+    return `<div class="choice-chip ${i===2 ? 'wild':''}">
+      <div class="choice-fill" style="width:${pct}%"></div>
+      <span>${label}</span><span>${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+function renderMySheet() {
+  const me = players.get(getMyName());
+  const gear = GEAR_TIERS[me.gearTier];
+  const nextGear = GEAR_TIERS[me.gearTier + 1];
+  const eq = me.equippedItem ? `${me.equippedItem.icon} ${me.equippedItem.name} (${'★'.repeat(me.collectibles[me.equippedItem.id] || 1)})` : 'None';
+  const container = document.getElementById('mySheet');
+  container.replaceChildren();
+  const fields = [
+    ['Hero: ', me.name],
+    ['Class: ', `${CLASSES[me.cls].icon} ${me.cls}`],
+    [`Lv.`, `${me.level} (${me.xp}/${xpNeeded(me.level)} XP · +${profBonus(me.level)} Prof)`],
+    ['Gold: ', `${me.gold}g · Capsules: ${me.bossCapsules}`],
+    ['Gear: ', `${gear.name} (+${gear.bonus})${nextGear ? ` → Next: ${nextGear.cost}g` : ''}`],
+    ['Gacha: ', `${eq} (+${getCollectibleBonus(me)})`]
+  ];
+  for (const [k, v] of fields) {
+    const sp = document.createElement('span');
+    sp.appendChild(document.createTextNode(k));
+    const b = document.createElement('b');
+    b.textContent = v;
+    sp.appendChild(b);
+    container.appendChild(sp);
+  }
+  const btn = document.getElementById('miniDmBtn');
+  btn.textContent = `📜 Use F2P Mini-Master Scroll (${me.miniDmScrolls})`;
+  btn.disabled = me.miniDmScrolls <= 0;
+}
+
+function updateTelemetry() {
+  document.getElementById('telAvatars').textContent = players.size;
+  document.getElementById('telQueue').textContent = `${pendingActions.length} / 15 LLM`;
+  document.getElementById('telFiltered').textContent = filteredNoiseCount;
+  document.getElementById('telCost').textContent = pendingActions.length > 0 ? '$0.03/hr' : '$0.00/hr (Idle)';
+}
+
+// ================= 2.5D ANIMAL CROSSING WORLD RENDERER =================
+const canvas = document.getElementById('worldCanvas');
+const ctx = canvas.getContext('2d');
+let lastTime = performance.now();
+
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  macroTimer -= dt;
+  if (macroTimer <= 0) {
+    macroTimer = 24.0;
+    const winIdx = votes.indexOf(Math.max(...votes));
+    setBatchFeed(`🗳️ 24s Macro Vote Won: ${CHAPTERS[chapterIdx].choices[winIdx]}!`, `Fresh votes opened!`);
+    votes = [2, 2, 1];
+    renderChoices();
+  }
+
+  batchTimer += dt;
+  if (batchTimer >= BATCH_INTERVAL) resolveRPBatch();
+  document.getElementById('timersTag').textContent = `Vote ${Math.ceil(macroTimer)}s · RP ${Math.max(0, BATCH_INTERVAL - batchTimer).toFixed(1)}s`;
+
+  if (currentDM.isGifter) {
+    if (currentDM.contestedUntil > 0 && Date.now() >= currentDM.contestedUntil) {
+      crownSkyDM(currentDM.challenger.name, currentDM.challenger.total, true);
+    }
+    currentDM.timeLeft = Math.max(0, currentDM.timeLeft - dt);
+    if (Math.floor(currentDM.timeLeft) !== Math.floor(currentDM.timeLeft + dt)) updateAuctionHUD();
+    if (currentDM.timeLeft <= 0) {
+      currentDM = { name: '🤖 AI Storyteller', isGifter: false, diamonds: 0, timeLeft: 0, hasDefended: false, contestedUntil: 0, challenger: null, reignGoldUsed: 0, reignXpUsed: 0, twist: null };
+      dmWindowLedger.clear();
+      worldMutator = null;
+      updateAuctionHUD();
+    }
+  }
+
+  if (cam.spotlightUntil > 0 && Date.now() > cam.spotlightUntil) {
+    cam.spotlightUntil = 0; cam.spotlightUser = null; cam.priority = 0;
+    cam.targetX = 270; cam.targetY = 405; cam.targetZoom = 1.0;
+    cam.mode = 'Wide Patrol';
+    document.getElementById('camPill').textContent = '🎥 Wide Patrol';
+  }
+  cam.x += (cam.targetX - cam.x) * 0.08;
+  cam.y += (cam.targetY - cam.y) * 0.08;
+  cam.zoom += (cam.targetZoom - cam.zoom) * 0.08;
+
+  if (wagon.active) {
+    wagon.x = Math.min(82, wagon.x + dt * 95);
+    wagon.timer -= dt;
+    if (wagon.timer <= 0) wagon.active = false;
+  }
+
+  for (const p of players.values()) {
+    const dx = p.tx - p.x, dy = p.ty - p.y, dist = Math.hypot(dx, dy);
+    if (dist > 2) { p.x += (dx/dist)*32*dt; p.y += (dy/dist)*32*dt; }
+    else if (Math.random() < 0.008 && Date.now() > p.jailedUntil) {
+      p.tx = p.zone === 'frontier' ? 305 + Math.random()*190 : 60 + Math.random()*195;
+      p.ty = 325 + Math.random()*185;
+    }
+  }
+
+  drawScene(now / 1000);
+  requestAnimationFrame(loop);
+}
+
+function drawScene(t) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const sky = ctx.createLinearGradient(0, 0, 0, 440);
+  if (worldMutator === 'lava') { sky.addColorStop(0, '#450a0a'); sky.addColorStop(1, '#991b1b'); }
+  else if (currentDM.isGifter) { sky.addColorStop(0, '#2e1065'); sky.addColorStop(1, '#1e3a8a'); }
+  else { sky.addColorStop(0, '#1e3a5f'); sky.addColorStop(1, '#60a5fa'); }
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height * 0.44);
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-cam.x, -cam.y);
+
+  ctx.fillStyle = worldMutator === 'lava' ? '#7c2d12' : '#4ade80';
+  ctx.beginPath(); ctx.ellipse(270, 560, 460, 315, 0, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = worldMutator === 'lava' ? '#451a03' : '#22c55e';
+  ctx.fillRect(-200, 555, 940, 500);
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.beginPath(); ctx.ellipse(155, 420, 112, 76, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 3; ctx.stroke();
+
+  ctx.strokeStyle = '#d97706'; ctx.lineWidth = 26; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(258, 422); ctx.quadraticCurveTo(350, 375, 435, 428); ctx.stroke();
+
+  drawLandmark(158, 348, '🏰', 'Throne Dais');
+  drawLandmark(78, 368, '⚒️', 'Blacksmith');
+  drawLandmark(85, 435, '⛓️', 'Pillory');
+  drawLandmark(215, 455, '🥚', 'Gacha Shrine');
+  drawLandmark(268, 422, '⛩️', 'Safe Gate');
+
+  drawSkyDM(t);
+
+  if (wagon.active) { ctx.font = '30px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🚐', wagon.x, wagon.y); }
+
+  const bossBounce = Math.sin(t * 3.5) * 4;
+  ctx.font = '44px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(worldMutator === 'frog' ? '🐸' : '👹', 445, 412 + bossBounce);
+  ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(408, 362, 74, 10);
+  ctx.fillStyle = '#ef4444'; ctx.fillRect(410, 364, 70 * (bossHp / bossMax), 6);
+
+  const nowMs = Date.now();
+  const visibleLabels = new Set(carouselLabels.filter(l => l.until > nowMs).map(l => l.name));
+  if (cam.spotlightUser) visibleLabels.add(cam.spotlightUser);
+  visibleLabels.add(kingName);
+
+  const myName = getMyName();
+  const sorted = [...players.values()].sort((a,b) => a.y - b.y);
+  for (const p of sorted) {
+    drawChibiPuppet(p, t, visibleLabels.has(p.name), p.name === myName);
+  }
+
+  if (worldMutator === '2xgold') {
+    ctx.font = '14px sans-serif';
+    for (let i = 0; i < 12; i++) {
+      ctx.fillText('🪙', (i * 47 + t * 20) % 540, ((t * 95 + i * 70) % 420) + 170);
+    }
+  }
+  ctx.restore();
+}
+
+function drawLandmark(x, y, icon, label) {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(x, y + 6, 20, 7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.font = '24px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(icon, x, y);
+  ctx.font = 'bold 9.5px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(label, x, y + 15);
+}
+
+function drawSkyDM(t) {
+  const sx = 270, sy = 282 + Math.sin(t * 1.8) * 4;
+  const grad = ctx.createRadialGradient(sx, sy - 16, 8, sx, sy - 16, 70);
+  grad.addColorStop(0, currentDM.isGifter ? 'rgba(251,191,36,0.48)' : 'rgba(96,165,250,0.34)');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(sx, sy - 16, 70, 0, Math.PI*2); ctx.fill();
+
+  ctx.fillStyle = currentDM.isGifter ? '#7c2d12' : '#1e293b';
+  ctx.beginPath(); ctx.arc(sx, sy - 28, 22, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fde6d8'; ctx.beginPath(); ctx.arc(sx, sy - 25, 15, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath(); ctx.arc(sx - 5, sy - 26, 2.2, 0, Math.PI*2); ctx.arc(sx + 5, sy - 26, 2.2, 0, Math.PI*2); ctx.fill();
+
+  ctx.fillStyle = currentDM.isGifter ? '#b45309' : '#334155';
+  ctx.strokeStyle = currentDM.isGifter ? '#fde047' : '#93c5fd';
+  ctx.lineWidth = 2.5;
+  ctx.fillRect(sx - 44, sy - 8, 88, 24);
+  ctx.strokeRect(sx - 44, sy - 8, 88, 24);
+  ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  ctx.fillText(currentDM.isGifter ? `👑 ${currentDM.name}` : '🤖 Storyteller', sx, sy + 7);
+}
+
+function drawChibiPuppet(p, t, showLabel, isSelf) {
+  const isMoving = Math.hypot(p.tx - p.x, p.ty - p.y) > 3;
+  const bounce = Math.abs(Math.sin(t * (isMoving ? 10 : 3) + p.bobOffset)) * (isMoving ? 4 : 1.5);
+  const py = p.y - bounce;
+  const cls = CLASSES[p.cls];
+  const gear = GEAR_TIERS[p.gearTier];
+
+  if (isSelf) {
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 8, 13, 6, 0, 0, Math.PI*2); ctx.stroke();
+  } else if (gear.aura) {
+    ctx.strokeStyle = gear.aura; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 8, 11, 5, 0, 0, Math.PI*2); ctx.stroke();
+  }
+
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(p.x, p.y + 8, 9, 4, 0, 0, Math.PI*2); ctx.fill();
+
+  if (worldMutator === 'frog') {
+    ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🐸', p.x, py + 4);
+  } else {
+    ctx.fillStyle = cls.color;
+    ctx.beginPath(); ctx.roundRect(p.x - 6, py - 4, 12, 11, 4); ctx.fill();
+    ctx.fillStyle = p.skin;
+    ctx.beginPath(); ctx.arc(p.x, py - 11, 9, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath(); ctx.arc(p.x - 3, py - 11, 1.4, 0, Math.PI*2); ctx.arc(p.x + 3, py - 11, 1.4, 0, Math.PI*2); ctx.fill();
+
+    if (p.name === kingName) {
+      ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('👑', p.x, py - 19);
+    } else if (p.cls === 'wizard') {
+      ctx.fillStyle = '#7c3aed'; ctx.beginPath(); ctx.moveTo(p.x - 9, py - 16); ctx.lineTo(p.x, py - 29); ctx.lineTo(p.x + 9, py - 16); ctx.closePath(); ctx.fill();
+    } else if (p.cls === 'knight') {
+      ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.arc(p.x, py - 15, 9, Math.PI, 0); ctx.fill();
+    } else if (p.cls === 'rogue') {
+      ctx.fillStyle = '#065f46'; ctx.beginPath(); ctx.arc(p.x, py - 13, 9.5, Math.PI * 0.9, Math.PI * 0.1); ctx.fill();
+    } else {
+      ctx.fillStyle = '#db2777'; ctx.fillRect(p.x - 7, py - 21, 14, 4);
+    }
+  }
+
+  if (isSelf) {
+    ctx.font = 'bold 9.5px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#34d399';
+    ctx.fillText('▼ YOU', p.x, py - 31 - Math.sin(t * 6) * 2);
+  }
+  if (p.pendingDice) {
+    ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('🎲', p.x, py - 26 + Math.sin(t * 14) * 3);
+  }
+  if (p.rollBadge && p.rollBadge.until > Date.now()) {
+    ctx.font = 'bold 9.5px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(p.x - 32, py - 45, 64, 14);
+    ctx.fillStyle = p.rollBadge.color; ctx.fillText(p.rollBadge.text, p.x, py - 35);
+  }
+  if (showLabel || isSelf) {
+    ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+    const w = ctx.measureText(p.name).width + 8;
+    ctx.fillStyle = isSelf ? 'rgba(5,150,105,0.92)' : (p.name === kingName ? 'rgba(180,83,9,0.92)' : 'rgba(15,23,42,0.86)');
+    ctx.fillRect(p.x - w/2, py + 11, w, 13);
+    ctx.fillStyle = '#fff'; ctx.fillText(p.name, p.x, py + 20);
+  }
+}
+
+initWorld();
+updateTelemetry();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
